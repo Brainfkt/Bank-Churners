@@ -1,0 +1,46 @@
+{
+  "selected_model": "xgboost_weighted",
+  "selected_unknown_strategy": "keep",
+  "threshold_policy": {
+    "threshold": 0.285,
+    "precision": 0.8253424657534246,
+    "recall": 0.9877049180327869,
+    "f1": 0.8992537313432836,
+    "f2": 0.9503154574132492
+  },
+  "calibration_decision": {
+    "selected": "raw",
+    "raw_brier": 0.021216300892680683,
+    "calibrated_brier": 0.02105213990786433,
+    "raw_pr_auc": 0.9764610963171273,
+    "calibrated_pr_auc": 0.9742112089595287
+  },
+  "validation_metrics": {
+    "roc_auc": 0.9949373191899711,
+    "pr_auc": 0.9764610963171273,
+    "recall": 0.9877049180327869,
+    "precision": 0.8253424657534246,
+    "f1": 0.8992537313432836,
+    "f2": 0.9503154574132492,
+    "brier": 0.021216300892680683,
+    "threshold": 0.285,
+    "tn": 1224,
+    "fp": 51,
+    "fn": 3,
+    "tp": 241
+  },
+  "test_metrics": {
+    "roc_auc": 0.9913214964797781,
+    "pr_auc": 0.9561777098302134,
+    "recall": 0.9549180327868853,
+    "precision": 0.761437908496732,
+    "f1": 0.8472727272727273,
+    "f2": 0.9087363494539782,
+    "brier": 0.02834034321180127,
+    "threshold": 0.285,
+    "tn": 1203,
+    "fp": 73,
+    "fn": 11,
+    "tp": 233
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "segmentation_mode": "fallback_personas",
+  "best_silhouette": 0.16714535955856974,
+  "reason": "Silhouette score below 0.25, clusters judged too weak for strong business interpretation."
+}

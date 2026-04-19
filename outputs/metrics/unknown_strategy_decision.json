@@ -1,0 +1,6 @@
+{
+  "keep_mean_pr_auc": 0.8762022862676773,
+  "missing_mean_pr_auc": 0.8757949248601269,
+  "selected_strategy": "keep",
+  "selection_rule": "Missing retained only if mean PR-AUC gain >= 0.005 across Logistic Regression and XGBoost."
+}

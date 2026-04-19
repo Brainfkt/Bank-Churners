@@ -1,0 +1,14 @@
+{
+  "true_positive": {
+    "CLIENTNUM": 714602658,
+    "row_position": 64
+  },
+  "false_positive": {
+    "CLIENTNUM": 778399008,
+    "row_position": 245
+  },
+  "false_negative": {
+    "CLIENTNUM": 712164333,
+    "row_position": 232
+  }
+}
