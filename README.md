@@ -80,7 +80,7 @@ python -m src.project_runner
 streamlit run dashboard/app.py
 ```
 
-### 4. Deploy on Streamlit Community Cloud
+### Deploy on Streamlit Community Cloud
 - entrypoint : `dashboard/app.py`
 - runtime dependencies for the app : `dashboard/requirements.txt`
 - pour reproduire l'environnement de développement, sélectionner **Python 3.13** dans les paramètres avancés du déploiement
