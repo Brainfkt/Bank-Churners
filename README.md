@@ -1,5 +1,7 @@
 # Bank Churners
 
+[![Streamlit App](https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B?logo=streamlit&logoColor=white)](https://bank-churners-brainfkt.streamlit.app/)
+
 ## Executive Summary
 Ce dépôt présente une étude complète de churn sur un portefeuille de cartes bancaires. L’objectif est double : expliquer les signaux associés à l’attrition et construire un score de risque exploitable pour des actions de rétention. Le projet est conçu comme un cas d’étude de niveau portfolio, avec une attention explicite portée à la rigueur méthodologique, à l’interprétabilité et à la qualité de communication.
 
