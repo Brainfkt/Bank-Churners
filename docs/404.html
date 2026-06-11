@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Redirecting to Bank Churners</title>
+    <meta name="robots" content="noindex" />
+    <script src="/config.js"></script>
+    <script>
+      const appUrl = (window.BANK_CHURNERS_DEPLOYMENT || {}).streamlitAppUrl || "";
+      if (appUrl && !appUrl.includes("YOUR-STREAMLIT-SUBDOMAIN")) {
+        window.location.replace(appUrl);
+      } else {
+        window.location.replace("/");
+      }
+    </script>
+  </head>
+  <body>
+    <p>Redirecting to Bank Churners...</p>
+  </body>
+</html>

@@ -1,6 +1,6 @@
 # Bank Churners
 
-[![Streamlit App](https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B?logo=streamlit&logoColor=white)](https://bank-churners-brainfkt.streamlit.app/)
+[![Streamlit App](https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B?logo=streamlit&logoColor=white)](https://bankchurners.human---think.ing/)
 
 ## Executive Summary
 Ce dépôt présente une étude complète de churn sur un portefeuille de cartes bancaires. L’objectif est double : expliquer les signaux associés à l’attrition et construire un score de risque exploitable pour des actions de rétention. Le projet est conçu comme un cas d’étude de niveau portfolio, avec une attention explicite portée à la rigueur méthodologique, à l’interprétabilité et à la qualité de communication.
@@ -84,6 +84,16 @@ streamlit run dashboard/app.py
 - entrypoint : `dashboard/app.py`
 - runtime dependencies for the app : `dashboard/requirements.txt`
 - pour reproduire l'environnement de développement, sélectionner **Python 3.13** dans les paramètres avancés du déploiement
+
+### Deploy redirect on Cloudflare Pages
+- source repository : `Brainfkt/Bank-Churners`
+- production branch : `main`
+- build command : empty
+- build output directory : `docs`
+- custom domain : `https://bankchurners.human---think.ing/`
+- redirect target : `https://bank-churners-brainfkt.streamlit.app/`
+
+Les détails de configuration sont documentés dans `DEPLOYMENT.md`.
 
 ### 4. Run tests
 ```bash

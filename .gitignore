@@ -8,7 +8,6 @@ __pycache__/
 .coverage
 htmlcov/
 .mplconfig/
-AGENTS.md
 
 # Environment / local runtime
 .env
