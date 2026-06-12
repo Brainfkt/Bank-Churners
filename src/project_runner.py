@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
+import platform
+import subprocess
+import sys
 
 import pandas as pd
 
 from src.data.load import build_audit_tables, load_raw_dataset, prepare_base_dataset
+from src.modeling.evaluate import build_slice_metrics
 from src.modeling.explain import export_model_diagnostics
 from src.modeling.train import compare_unknown_strategies, train_full_benchmark
 from src.segmentation.clustering import run_segmentation
@@ -62,6 +67,15 @@ def run_project_pipeline() -> dict[str, object]:
         how="left",
     )
     save_frame(scored_segments, PATHS.output_predictions / "customer_risk_scores_with_segments.csv")
+    slice_metrics = _export_slice_metrics(base_df, diagnostics, scored_segments, benchmark_results["threshold"])
+    run_manifest = _build_run_manifest(
+        base_df=base_df,
+        selected_strategy=selected_strategy,
+        benchmark_results=benchmark_results,
+        segmentation_results=segmentation_results,
+        slice_metrics=slice_metrics,
+    )
+    save_json(run_manifest, PATHS.output_metrics / "run_manifest.json")
 
     return {
         "audit_summary": audit_summary,
@@ -69,6 +83,8 @@ def run_project_pipeline() -> dict[str, object]:
         "benchmark_results": benchmark_results,
         "diagnostics": diagnostics,
         "segmentation_results": segmentation_results,
+        "slice_metrics": slice_metrics,
+        "run_manifest": run_manifest,
     }
 
 
@@ -85,6 +101,123 @@ def _ensure_output_folders() -> None:
     ]
     for folder in folders:
         folder.mkdir(parents=True, exist_ok=True)
+
+
+def _export_slice_metrics(
+    base_df: pd.DataFrame,
+    test_predictions: pd.DataFrame,
+    scored_segments: pd.DataFrame,
+    threshold: float,
+) -> pd.DataFrame:
+    slice_frame = (
+        test_predictions.merge(
+            base_df[
+                [
+                    "CLIENTNUM",
+                    "Gender",
+                    "Income_Category",
+                    "Card_Category",
+                    "Customer_Age",
+                ]
+            ],
+            on="CLIENTNUM",
+            how="left",
+        )
+        .merge(scored_segments[["CLIENTNUM", "cluster_label"]], on="CLIENTNUM", how="left")
+        .copy()
+    )
+    slice_frame["age_band"] = pd.cut(
+        slice_frame["Customer_Age"],
+        bins=[25, 39, 49, 59, 80],
+        labels=["26 à 39 ans", "40 à 49 ans", "50 à 59 ans", "60 ans et plus"],
+        include_lowest=True,
+    ).astype(str)
+    slice_frame["risk_band"] = pd.cut(
+        slice_frame["churn_probability"],
+        bins=[-0.001, 0.15, threshold, 0.50, 1.0],
+        labels=["Faible", "Moyen", "Élevé", "Très élevé"],
+        include_lowest=True,
+    ).astype(str)
+    slice_metrics = build_slice_metrics(
+        slice_frame,
+        dimensions=[
+            "Gender",
+            "Income_Category",
+            "Card_Category",
+            "age_band",
+            "cluster_label",
+            "risk_band",
+        ],
+    )
+    save_frame(slice_metrics, PATHS.output_metrics / "slice_metrics.csv")
+    return slice_metrics
+
+
+def _build_run_manifest(
+    base_df: pd.DataFrame,
+    selected_strategy: str,
+    benchmark_results: dict[str, object],
+    segmentation_results: dict[str, object],
+    slice_metrics: pd.DataFrame,
+) -> dict[str, object]:
+    tracked_artifacts = [
+        PATHS.output_metrics / "model_selection_summary.json",
+        PATHS.output_metrics / "threshold_sensitivity.csv",
+        PATHS.output_metrics / "calibration_table.csv",
+        PATHS.output_metrics / "slice_metrics.csv",
+        PATHS.output_metrics / "model_stability.json",
+        PATHS.output_predictions / "customer_risk_scores_with_segments.csv",
+        PATHS.output_predictions / "test_set_predictions.csv",
+        PATHS.output_segmentation / "segmentation_summary.json",
+    ]
+    return {
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "git": {
+            "commit": _git_output(["git", "rev-parse", "HEAD"]),
+            "branch": _git_output(["git", "branch", "--show-current"]),
+            "dirty": bool(_git_output(["git", "status", "--short"])),
+        },
+        "runtime": {
+            "python": sys.version.split()[0],
+            "platform": platform.platform(),
+        },
+        "dataset": {
+            "rows": int(base_df.shape[0]),
+            "columns": int(base_df.shape[1]),
+            "churn_rate": float(base_df["churn_flag"].mean()),
+        },
+        "model": {
+            "selected_model": str(benchmark_results["benchmark"].iloc[0]["candidate_name"]),
+            "selected_unknown_strategy": selected_strategy,
+            "recommended_threshold": float(benchmark_results["threshold"]),
+            "test_pr_auc": float(benchmark_results["test_summary"].pr_auc),
+            "test_recall": float(benchmark_results["test_summary"].recall),
+            "test_precision": float(benchmark_results["test_summary"].precision),
+        },
+        "segmentation": {
+            "mode": segmentation_results["mode"],
+            "best_silhouette": float(segmentation_results["best_silhouette"]),
+        },
+        "monitoring": {
+            "slice_metric_rows": int(len(slice_metrics)),
+        },
+        "artifacts": [
+            {
+                "path": str(path.relative_to(PATHS.root)),
+                "exists": path.exists(),
+                "size_bytes": int(path.stat().st_size) if path.exists() else 0,
+            }
+            for path in tracked_artifacts
+        ],
+    }
+
+
+def _git_output(command: list[str]) -> str:
+    try:
+        result = subprocess.run(command, cwd=PATHS.root, capture_output=True, text=True, check=False)
+    except OSError:
+        return ""
+    return result.stdout.strip()
 
 
 if __name__ == "__main__":

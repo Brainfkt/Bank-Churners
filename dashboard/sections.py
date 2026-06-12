@@ -12,6 +12,7 @@ from dashboard.components import methodological_note, section_intro, section_tra
 from dashboard.content import COLUMN_EXPLANATIONS, PERSONA_ACTIONS, PERSONA_DESCRIPTIONS, RISK_BAND_DESCRIPTIONS, UI_LABELS
 from dashboard.data import (
     build_action_table,
+    build_artifact_health_table,
     build_dimension_profile,
     build_executive_story,
     build_high_risk_comparison,
@@ -23,6 +24,8 @@ from dashboard.data import (
     persona_differences,
     prepare_display_table,
     summarize_population,
+    threshold_row,
+    to_csv_bytes,
 )
 
 
@@ -65,7 +68,7 @@ def render_executive_overview(bundle, filtered: pd.DataFrame) -> None:
         st.markdown("**Où se concentre le risque par segment client ?**")
         st.caption("Chaque barre représente un segment client. Sa longueur montre son poids dans le périmètre, tandis que les couleurs montrent la répartition entre risque faible, moyen, élevé et très élevé.")
         fig, segment_priority = _build_executive_overview_figure(filtered)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch", key="executive_overview_risk_by_segment")
 
     st.markdown("**Lecture rapide des priorités**")
     st.caption("Le tableau ci-dessous réunit, en un seul endroit, la taille du segment, son niveau de risque et la logique d'action recommandée.")
@@ -129,7 +132,7 @@ def render_executive_overview(bundle, filtered: pd.DataFrame) -> None:
                     "Hypothèse d'action",
                 ]
             ],
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "Segment client": st.column_config.TextColumn(
@@ -343,7 +346,7 @@ def render_customer_profiles(filtered: pd.DataFrame) -> None:
         },
     )
     fig.update_layout(legend_title_text="Indicateur", xaxis_title=PROFILE_DIMENSIONS[selected_dimension], yaxis_title="Valeur")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch", key="customer_profile_risk_score_by_dimension")
     takeaway("Un profil peut afficher un taux de churn observé élevé, un score élevé, ou les deux. C'est ce croisement qui guide la priorisation.")
 
     st.markdown("**Comportement transactionnel moyen**")
@@ -362,7 +365,7 @@ def render_customer_profiles(filtered: pd.DataFrame) -> None:
         },
     )
     fig.update_layout(legend_title_text="Indicateur", xaxis_title=PROFILE_DIMENSIONS[selected_dimension], yaxis_title="Valeur moyenne")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch", key="customer_profile_transaction_by_dimension")
     takeaway("La lecture conjointe du volume et du montant transactionnel aide à différencier les clients réellement engagés des clients plus passifs.")
 
     st.markdown("**Table de lecture détaillée**")
@@ -377,7 +380,7 @@ def render_customer_profiles(filtered: pd.DataFrame) -> None:
             "transactions_moyennes": "Nombre moyen de transactions",
         }
     )
-    st.dataframe(display_df, use_container_width=True)
+    st.dataframe(display_df, width="stretch")
     top_row = profile_df.sort_values(["taux_churn", "score_moyen"], ascending=False).iloc[0]
     takeaway(
         f"Le profil le plus exposé sur cette dimension est « {top_row[selected_dimension]} », avec un taux de churn observé de {top_row['taux_churn']:.1%} et un score moyen de {top_row['score_moyen']:.3f}."
@@ -404,7 +407,7 @@ def render_churn_drivers(bundle, filtered: pd.DataFrame) -> None:
         },
     )
     fig.update_layout(legend_title_text="Famille de signaux", yaxis_title="")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch", key="churn_drivers_feature_importance")
     takeaway("Les variables dominantes racontent surtout un désengagement d'usage : moins d'activité, plus d'inactivité, ou une relation bancaire moins profonde.")
 
     st.markdown("**Lecture par grande famille de signaux**")
@@ -427,7 +430,7 @@ def render_churn_drivers(bundle, filtered: pd.DataFrame) -> None:
         color_continuous_scale="Blues",
     )
     fig.update_layout(coloraxis_showscale=False, yaxis_title="")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch", key="churn_drivers_family_importance")
     methodological_note("Un driver très prédictif peut n'être qu'un proxy. Par exemple, l'inactivité récente capture un retrait de l'usage, mais ne démontre pas à elle seule pourquoi le client part.")
 
     st.markdown("**Heatmap de corrélation sur le périmètre filtré**")
@@ -469,7 +472,7 @@ def render_churn_drivers(bundle, filtered: pd.DataFrame) -> None:
     if correlation_fig is None:
         methodological_note("Sélectionnez au moins deux indicateurs numériques pour afficher une heatmap de corrélation lisible.")
     else:
-        st.plotly_chart(correlation_fig, use_container_width=True)
+        st.plotly_chart(correlation_fig, width="stretch", key="churn_drivers_correlation_heatmap")
         takeaway("La heatmap aide à distinguer les variables qui évoluent ensemble de celles qui apportent une information plus indépendante. Elle ne prouve pas une relation causale.")
 
     with st.expander("Visualisations SHAP avancées", expanded=False):
@@ -480,13 +483,13 @@ def render_churn_drivers(bundle, filtered: pd.DataFrame) -> None:
         ]:
             image_path = bundle.figures_dir / image_name
             if image_path.exists():
-                st.image(str(image_path), caption=caption, use_container_width=True)
+                st.image(str(image_path), caption=caption, width="stretch")
 
     st.markdown("**Cas locaux pour interpréter le modèle sans le sur-vendre**")
     st.caption("Ces trois exemples concrets montrent comment lire une bonne détection, une fausse alerte et un churner manqué.")
     case_table = build_local_explanation_table(bundle.population, getattr(bundle, "local_explanations", {}))
     if not case_table.empty:
-        st.dataframe(case_table, use_container_width=True, hide_index=True)
+        st.dataframe(case_table, width="stretch", hide_index=True)
     case_meta = [
         ("true_positive", "Churner bien détecté", "shap_waterfall_true_positive.png"),
         ("false_positive", "Fausse alerte", "shap_waterfall_false_positive.png"),
@@ -501,7 +504,7 @@ def render_churn_drivers(bundle, filtered: pd.DataFrame) -> None:
         with st.expander(title, expanded=False):
             st.markdown(
                 f"""
-                - **Client** : {int(descriptor['Identifiant client'])}
+                - **Référence client** : {descriptor.get('Référence client', 'Non disponible')}
                 - **Segment client** : {descriptor['Segment client']}
                 - **Bande de risque** : {descriptor['Bande de risque']}
                 - **Score de churn** : {descriptor['Score de churn']:.3f}
@@ -509,7 +512,7 @@ def render_churn_drivers(bundle, filtered: pd.DataFrame) -> None:
                 """
             )
             if image_path.exists():
-                st.image(str(image_path), caption=f"Visualisation locale SHAP : {title}", use_container_width=True)
+                st.image(str(image_path), caption=f"Visualisation locale SHAP : {title}", width="stretch")
     methodological_note("Les cas locaux sont utiles pour comprendre comment le modèle raisonne sur quelques clients concrets. Ils ne doivent pas être extrapolés comme des règles universelles.")
     takeaway("Les vues traduites du dashboard doivent guider l'action. Les visuels SHAP détaillés restent disponibles en lecture complémentaire pour un public plus technique.")
 
@@ -558,7 +561,7 @@ def render_model_performance(bundle, filtered: pd.DataFrame) -> None:
 
     st.markdown("**Comparaison des modèles candidats**")
     st.caption("Les modèles sont comparés sur la qualité de détection des churners, avec une attention particulière portée à la PR-AUC et au recall.")
-    st.dataframe(bundle.benchmark, use_container_width=True)
+    st.dataframe(bundle.benchmark, width="stretch")
     takeaway("Le modèle XGBoost pondéré est retenu car il domine les autres candidats en PR-AUC tout en conservant un recall très élevé, cohérent avec une logique de rétention proactive.")
 
     st.markdown("**Pourquoi ce modèle est privilégié**")
@@ -637,7 +640,7 @@ def render_model_performance(bundle, filtered: pd.DataFrame) -> None:
             },
         ]
     )
-    st.dataframe(threshold_table, use_container_width=True, hide_index=True)
+    st.dataframe(threshold_table, width="stretch", hide_index=True)
     takeaway("Le seuil ne cherche pas à éliminer toutes les fausses alertes. Il privilégie d'abord la détection des churners, car l'enjeu métier est de réduire les départs manqués.")
 
     for image_name, caption in [
@@ -646,7 +649,7 @@ def render_model_performance(bundle, filtered: pd.DataFrame) -> None:
     ]:
         image_path = bundle.figures_dir / image_name
         if image_path.exists():
-            st.image(str(image_path), caption=caption, use_container_width=True)
+            st.image(str(image_path), caption=caption, width="stretch")
 
     st.markdown("**Lecture du périmètre filtré sur l'échantillon de test**")
     st.caption("Cette lecture locale n'est affichée que si le sous-échantillon filtré contient suffisamment de cas et les deux classes.")
@@ -673,7 +676,7 @@ def render_model_performance(bundle, filtered: pd.DataFrame) -> None:
             )
         )
         fig.update_layout(title="Matrice de confusion sur le sous-échantillon filtré", xaxis_title="", yaxis_title="")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch", key="model_performance_filtered_confusion_matrix")
         takeaway("Cette matrice locale permet de vérifier si la logique d'alerte reste cohérente pour le sous-ensemble actuellement analysé.")
 
 
@@ -699,7 +702,7 @@ def render_risk_scoring(filtered: pd.DataFrame) -> None:
     )
     fig.update_traces(texttemplate="score moyen %{text:.2f}", textposition="outside")
     fig.update_layout(showlegend=False)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch", key="risk_scoring_band_distribution")
     takeaway("Les bandes de risque servent à transformer un score continu en priorités d'action plus lisibles pour les équipes métier.")
 
     st.markdown("**Comment lire les bandes de risque**")
@@ -725,7 +728,7 @@ def render_risk_scoring(filtered: pd.DataFrame) -> None:
         color="bande_risque" if compare_dimension == "bande_risque" else None,
         labels={compare_dimension: PROFILE_DIMENSIONS[compare_dimension], "clients": "Nombre de clients"},
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch", key="risk_scoring_dimension_composition")
     takeaway("Le score aide à prioriser. Il ne remplace pas une validation métier ni une décision commerciale contextualisée.")
 
     st.markdown("**Qui compose le haut du portefeuille à risque ?**")
@@ -749,20 +752,201 @@ def render_risk_scoring(filtered: pd.DataFrame) -> None:
             labels={"segment_client": "Segment client", "clients": "Clients", "score_moyen": "Score moyen de churn"},
         )
         fig.update_layout(coloraxis_colorbar_title="Score moyen")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch", key="risk_scoring_high_risk_segments")
 
         comparison = build_high_risk_comparison(filtered)
         if not comparison.empty:
             comparison_display = comparison.copy()
             comparison_display["Écart relatif"] = comparison_display["Écart relatif"].map(lambda value: f"{value:+.1%}")
             st.caption("Le tableau ci-dessous compare les clients à risque élevé au reste du portefeuille actuellement affiché.")
-            st.dataframe(comparison_display, use_container_width=True, hide_index=True)
+            st.dataframe(comparison_display, width="stretch", hide_index=True)
         takeaway("Les clients à risque élevé se lisent mieux quand on distingue leur poids, leur persona dominant et leurs écarts comportementaux par rapport au reste du portefeuille.")
 
     st.markdown("**Table de clients à investiguer**")
     st.caption("La table reste triable et permet une lecture opérationnelle rapide avec un vocabulaire non technique.")
     display_table = prepare_display_table(working_df.sort_values("score_churn", ascending=False).head(100))
-    st.dataframe(display_table, use_container_width=True)
+    st.dataframe(display_table, width="stretch")
+    st.download_button(
+        "Télécharger la liste affichée",
+        data=to_csv_bytes(display_table),
+        file_name="bank_churners_clients_a_investiguer.csv",
+        mime="text/csv",
+        width="stretch",
+    )
+
+
+def render_decision_lab(bundle, filtered: pd.DataFrame) -> None:
+    st.header("Decision Lab")
+    section_intro(
+        "Cette page permet de relire le seuil comme une décision opérationnelle : combien de clients cibler, combien de churners capter, et quel volume de fausses alertes accepter."
+    )
+
+    recommended_threshold = float(bundle.model_summary["threshold_policy"]["threshold"])
+    selected_threshold = st.slider(
+        "Seuil opérationnel simulé",
+        min_value=0.05,
+        max_value=0.95,
+        value=recommended_threshold,
+        step=0.005,
+        format="%.3f",
+        help="Les métriques de précision et recall proviennent du jeu de test. Les volumes ciblés se recalculent sur le périmètre filtré.",
+    )
+    selected_row = threshold_row(bundle.threshold_sensitivity, selected_threshold)
+    targeted = filtered[filtered["score_churn"] >= selected_threshold].sort_values("score_churn", ascending=False)
+    targeted_rate = len(targeted) / len(filtered) if len(filtered) else 0.0
+
+    cols = st.columns(4)
+    cols[0].metric("Clients ciblés", f"{len(targeted):,}".replace(",", " "), help="Volume de clients du périmètre filtré au-dessus du seuil simulé.")
+    cols[1].metric("Part ciblée", f"{targeted_rate:.1%}", help="Part du périmètre filtré concernée par le seuil.")
+    cols[2].metric("Recall test attendu", f"{selected_row['recall']:.1%}", help="Part des churners captés sur le jeu de test à ce seuil.")
+    cols[3].metric("Précision test attendue", f"{selected_row['precision']:.1%}", help="Part des alertes effectivement churn sur le jeu de test à ce seuil.")
+
+    st.markdown("**Courbe de compromis du seuil**")
+    sensitivity = bundle.threshold_sensitivity.copy()
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=sensitivity["threshold"], y=sensitivity["recall"], mode="lines", name="Recall churn"))
+    fig.add_trace(go.Scatter(x=sensitivity["threshold"], y=sensitivity["precision"], mode="lines", name="Précision churn"))
+    fig.add_trace(go.Scatter(x=sensitivity["threshold"], y=sensitivity["targeted_rate"], mode="lines", name="Part ciblée test"))
+    fig.add_vline(x=selected_threshold, line_dash="dash", line_color="#D7263D")
+    fig.update_layout(
+        yaxis_tickformat=".0%",
+        xaxis_title="Seuil",
+        yaxis_title="Valeur",
+        legend_title_text="Indicateur",
+        margin=dict(t=20, r=20, b=20, l=20),
+    )
+    st.plotly_chart(fig, width="stretch", key="threshold_strategy_curve")
+    methodological_note(
+        "Le simulateur ne prédit pas l'impact causal d'une campagne. Il montre seulement le compromis attendu entre couverture des churners et volume d'alertes."
+    )
+
+    st.markdown("**Liste de travail au seuil simulé**")
+    if targeted.empty:
+        st.warning("Aucun client du périmètre filtré ne dépasse ce seuil.")
+        return
+
+    export_table = prepare_display_table(targeted.head(500))
+    st.caption("La table ci-dessous est plafonnée à 500 clients pour garder une lecture opérationnelle dans le dashboard. L'export reprend cette liste visible.")
+    st.dataframe(export_table, width="stretch", hide_index=True)
+    st.download_button(
+        "Télécharger la cible simulée",
+        data=to_csv_bytes(export_table),
+        file_name=f"bank_churners_cible_seuil_{selected_threshold:.3f}.csv",
+        mime="text/csv",
+        width="stretch",
+    )
+
+
+def render_model_reliability(bundle, filtered: pd.DataFrame) -> None:
+    st.header("Model Reliability")
+    section_intro(
+        "Cette page sert à éviter une lecture trop confiante du modèle : stabilité validation/test, calibration probabiliste et performances par sous-population."
+    )
+
+    stability = bundle.model_stability
+    gaps = stability.get("gaps_test_minus_validation", {})
+    status_text = "Dégradation matérielle détectée" if stability.get("material_drop_detected") else "Écarts validation/test contenus"
+    cols = st.columns(4)
+    cols[0].metric("Statut stabilité", status_text)
+    cols[1].metric("Écart PR-AUC", f"{gaps.get('pr_auc_gap', 0):+.3f}")
+    cols[2].metric("Écart recall", f"{gaps.get('recall_gap', 0):+.1%}")
+    cols[3].metric("Écart précision", f"{gaps.get('precision_gap', 0):+.1%}")
+    st.caption(stability.get("interpretation", ""))
+
+    comparison = pd.DataFrame(
+        [
+            {"Échantillon": "Validation", **stability["validation"]},
+            {"Échantillon": "Test", **stability["test"]},
+        ]
+    )
+    st.markdown("**Validation vs test**")
+    st.dataframe(
+        comparison[["Échantillon", "pr_auc", "roc_auc", "recall", "precision", "f1", "f2", "brier", "threshold"]],
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.markdown("**Calibration du score**")
+    calibration = bundle.calibration_table.copy()
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=calibration["mean_predicted_score"],
+            y=calibration["observed_churn_rate"],
+            mode="lines+markers",
+            name="Churn observé",
+            customdata=calibration[["customers", "score_bin"]],
+            hovertemplate="Bin %{customdata[1]}<br>Clients : %{customdata[0]}<br>Score moyen : %{x:.3f}<br>Churn observé : %{y:.1%}<extra></extra>",
+        )
+    )
+    fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode="lines", name="Calibration parfaite", line=dict(dash="dash", color="#667085")))
+    fig.update_layout(
+        xaxis_title="Score moyen prédit",
+        yaxis_title="Taux de churn observé",
+        xaxis_tickformat=".0%",
+        yaxis_tickformat=".0%",
+        margin=dict(t=20, r=20, b=20, l=20),
+    )
+    st.plotly_chart(fig, width="stretch", key="model_reliability_calibration")
+    takeaway("Une calibration imparfaite n'empêche pas la priorisation, mais elle limite l'interprétation littérale du score comme probabilité individuelle exacte.")
+
+    st.markdown("**Performance par sous-population**")
+    dimensions = bundle.slice_metrics["dimension_label"].drop_duplicates().tolist()
+    selected_dimension = st.selectbox("Dimension à auditer", options=dimensions)
+    slice_display = bundle.slice_metrics[bundle.slice_metrics["dimension_label"] == selected_dimension].copy()
+    slice_display = slice_display.sort_values(["is_interpretable", "n"], ascending=False)
+    if not slice_display.empty:
+        chart_df = slice_display[slice_display["is_interpretable"]].copy()
+        if not chart_df.empty:
+            fig = px.bar(
+                chart_df,
+                x="value_label",
+                y=["recall", "precision"],
+                barmode="group",
+                labels={"value_label": selected_dimension, "value": "Valeur", "variable": "Indicateur"},
+            )
+            fig.update_layout(yaxis_tickformat=".0%", legend_title_text="Indicateur")
+            st.plotly_chart(fig, width="stretch", key="model_reliability_slice_performance")
+        st.dataframe(
+            slice_display[
+                [
+                    "value_label",
+                    "n",
+                    "churn_rate",
+                    "mean_score",
+                    "precision",
+                    "recall",
+                    "pr_auc",
+                    "is_interpretable",
+                ]
+            ].rename(
+                columns={
+                    "value_label": selected_dimension,
+                    "n": "Clients test",
+                    "churn_rate": "Taux churn",
+                    "mean_score": "Score moyen",
+                    "precision": "Précision",
+                    "recall": "Recall",
+                    "pr_auc": "PR-AUC",
+                    "is_interpretable": "Interprétable",
+                }
+            ),
+            width="stretch",
+            hide_index=True,
+        )
+    methodological_note("Les métriques par sous-population sont masquées ou marquées non interprétables lorsque le volume ou la diversité de classes est insuffisant.")
+
+    st.markdown("**Lecture locale du périmètre filtré**")
+    filtered_test, warning_message = get_filtered_test_subset(filtered)
+    if warning_message:
+        methodological_note(warning_message)
+    else:
+        metrics = compute_filtered_metrics(filtered_test)
+        local_cols = st.columns(4)
+        local_cols[0].metric("Clients test", metrics["n"])
+        local_cols[1].metric("Recall local", f"{metrics['recall']:.1%}")
+        local_cols[2].metric("Précision locale", f"{metrics['precision']:.1%}")
+        local_cols[3].metric("PR-AUC locale", f"{metrics['pr_auc']:.3f}")
 
 
 def render_customer_segmentation(bundle, filtered: pd.DataFrame) -> None:
@@ -793,7 +977,7 @@ def render_customer_segmentation(bundle, filtered: pd.DataFrame) -> None:
         },
     )
     fig.update_layout(legend_title_text="Indicateur")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch", key="customer_segmentation_personas")
     takeaway("Les personas les plus prioritaires sont ceux qui cumulent un score moyen élevé, un taux de churn observé fort et un poids non négligeable dans la population.")
 
     st.markdown("**Lecture détaillée des personas**")
@@ -822,7 +1006,7 @@ def render_customer_segmentation(bundle, filtered: pd.DataFrame) -> None:
                 format="%d",
             )
         },
-        use_container_width=True,
+        width="stretch",
     )
 
     segments_available = segment_table["segment_client"].tolist()
@@ -850,7 +1034,7 @@ def render_customer_segmentation(bundle, filtered: pd.DataFrame) -> None:
         if not diff_table.empty:
             diff_table["Écart relatif"] = diff_table["Écart relatif"].map(lambda value: f"{value:+.1%}" if pd.notna(value) else "n.d.")
             column.caption("Ce tableau compare le persona au reste du périmètre filtré.")
-            column.dataframe(diff_table, use_container_width=True, hide_index=True)
+            column.dataframe(diff_table, width="stretch", hide_index=True)
 
 
 def render_business_actions(filtered: pd.DataFrame) -> None:
@@ -888,7 +1072,7 @@ def render_business_actions(filtered: pd.DataFrame) -> None:
                 "hypothese_action": "Hypothèse d'action",
             }
         ),
-        use_container_width=True,
+        width="stretch",
     )
 
     st.markdown("**Triage recommandé sur le périmètre courant**")
@@ -930,3 +1114,45 @@ def render_business_actions(filtered: pd.DataFrame) -> None:
     methodological_note(
         "Le dashboard n'identifie pas des causes certaines du churn. Il suggère des hypothèses d'action à tester, puis à confronter à l'expérience métier et, si possible, à des expérimentations contrôlées."
     )
+
+
+def render_data_artifact_health(bundle, filtered: pd.DataFrame) -> None:
+    st.header("Data & Artifact Health")
+    section_intro(
+        "Cette page expose les informations de génération des artefacts utilisés par le dashboard. Elle rend visibles la fraîcheur, le commit et les principaux contrats de reproductibilité."
+    )
+
+    manifest = bundle.run_manifest
+    model_info = manifest.get("model", {})
+    dataset_info = manifest.get("dataset", {})
+    git_info = manifest.get("git", {})
+
+    cols = st.columns(4)
+    cols[0].metric("Clients artefact", f"{dataset_info.get('rows', 0):,}".replace(",", " "))
+    cols[1].metric("Churn observé", f"{dataset_info.get('churn_rate', 0):.1%}")
+    cols[2].metric("Seuil recommandé", f"{model_info.get('recommended_threshold', 0):.3f}")
+    cols[3].metric("Clients filtrés", f"{len(filtered):,}".replace(",", " "))
+
+    st.markdown("**Manifeste du dernier run**")
+    manifest_table = pd.DataFrame(
+        [
+            {"Contrat": "Généré le", "Valeur": manifest.get("generated_at_utc", "n.d.")},
+            {"Contrat": "Commit Git", "Valeur": git_info.get("commit", "n.d.")},
+            {"Contrat": "Branche", "Valeur": git_info.get("branch", "n.d.")},
+            {"Contrat": "Repo dirty au moment du run", "Valeur": "Oui" if git_info.get("dirty") else "Non"},
+            {"Contrat": "Modèle retenu", "Valeur": model_info.get("selected_model", "n.d.")},
+            {"Contrat": "Stratégie Unknown", "Valeur": model_info.get("selected_unknown_strategy", "n.d.")},
+            {"Contrat": "PR-AUC test", "Valeur": f"{model_info.get('test_pr_auc', 0):.3f}"},
+            {"Contrat": "Recall test", "Valeur": f"{model_info.get('test_recall', 0):.1%}"},
+            {"Contrat": "Précision test", "Valeur": f"{model_info.get('test_precision', 0):.1%}"},
+        ]
+    )
+    st.dataframe(manifest_table, width="stretch", hide_index=True)
+
+    st.markdown("**Présence des artefacts critiques**")
+    artifact_table = build_artifact_health_table(bundle.root, manifest)
+    st.dataframe(artifact_table, width="stretch", hide_index=True)
+    if not artifact_table.empty and not artifact_table["Présent"].all():
+        methodological_note("Un ou plusieurs artefacts critiques sont manquants. Relancez `python -m src.project_runner` avant de publier le dashboard.")
+    else:
+        takeaway("Tous les artefacts critiques déclarés dans le manifeste sont disponibles pour le dashboard.")

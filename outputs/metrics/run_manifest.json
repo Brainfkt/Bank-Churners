@@ -1,0 +1,74 @@
+{
+  "generated_at_utc": "2026-06-11T21:45:35.829855+00:00",
+  "git": {
+    "commit": "058b7503c03c6db38f3192913cd3ac5805c31756",
+    "branch": "main",
+    "dirty": true
+  },
+  "runtime": {
+    "python": "3.13.5",
+    "platform": "macOS-26.5-arm64-arm-64bit-Mach-O"
+  },
+  "dataset": {
+    "rows": 10127,
+    "columns": 22,
+    "churn_rate": 0.1606596227905599
+  },
+  "model": {
+    "selected_model": "xgboost_weighted",
+    "selected_unknown_strategy": "keep",
+    "recommended_threshold": 0.285,
+    "test_pr_auc": 0.9561777098302134,
+    "test_recall": 0.9549180327868853,
+    "test_precision": 0.761437908496732
+  },
+  "segmentation": {
+    "mode": "fallback_personas",
+    "best_silhouette": 0.16714535955856974
+  },
+  "monitoring": {
+    "slice_metric_rows": 24
+  },
+  "artifacts": [
+    {
+      "path": "outputs/metrics/model_selection_summary.json",
+      "exists": true,
+      "size_bytes": 1173
+    },
+    {
+      "path": "outputs/metrics/threshold_sensitivity.csv",
+      "exists": true,
+      "size_bytes": 21309
+    },
+    {
+      "path": "outputs/metrics/calibration_table.csv",
+      "exists": true,
+      "size_bytes": 950
+    },
+    {
+      "path": "outputs/metrics/slice_metrics.csv",
+      "exists": true,
+      "size_bytes": 3604
+    },
+    {
+      "path": "outputs/metrics/model_stability.json",
+      "exists": true,
+      "size_bytes": 1108
+    },
+    {
+      "path": "outputs/predictions/customer_risk_scores_with_segments.csv",
+      "exists": true,
+      "size_bytes": 474259
+    },
+    {
+      "path": "outputs/predictions/test_set_predictions.csv",
+      "exists": true,
+      "size_bytes": 61067
+    },
+    {
+      "path": "outputs/segmentation/segmentation_summary.json",
+      "exists": true,
+      "size_bytes": 193
+    }
+  ]
+}

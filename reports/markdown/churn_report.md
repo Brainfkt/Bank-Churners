@@ -74,6 +74,18 @@ Sur le jeu de test, le modèle final atteint :
 
 Le seuil recommandé est fixé à `0.285`. Ce choix reflète une logique de rétention agressive mais encore disciplinée : il permet de récupérer la quasi-totalité des churners tout en gardant un niveau de précision supérieur à 0,75 sur le jeu de test.
 
+# Reliability & Threshold Audit
+
+La V2 ajoute une couche d'audit de fiabilité afin de réduire le risque de sur-confiance. Le pipeline exporte désormais une table de sensibilité au seuil, une table de calibration, un rapport de stabilité validation / test et des métriques par sous-population.
+
+Cette lecture répond à trois questions opérationnelles :
+
+- que se passe-t-il si le seuil est rendu plus strict ou plus permissif ?
+- les scores moyens correspondent-ils raisonnablement aux taux de churn observés par bande ?
+- certaines sous-populations sont-elles trop petites ou trop instables pour être interprétées fortement ?
+
+Ces artefacts ne changent pas l'objectif du modèle. Ils rendent simplement plus explicite le compromis entre couverture des churners, volume de fausses alertes et prudence méthodologique.
+
 # Explainability
 
 L’explicabilité combine une lecture globale des importances et des vues SHAP globales / locales. Cette couche sert à confronter la logique du modèle à l’intuition métier :
@@ -97,6 +109,11 @@ Le dashboard Streamlit adopte une double lecture :
 - un niveau data pour le benchmark, les courbes de performance et les drivers.
 
 L’application lit exclusivement les artefacts sauvegardés par le pipeline afin de rester reproductible et légère.
+La V2 ajoute trois surfaces de décision :
+
+- `Decision Lab`, pour simuler un seuil et exporter une liste de clients à investiguer ;
+- `Model Reliability`, pour relire calibration, stabilité et performance par slice ;
+- `Data & Artifact Health`, pour vérifier le manifeste de run, le commit et la présence des artefacts critiques.
 
 # Business Recommendations
 

@@ -17,7 +17,13 @@ from xgboost import XGBClassifier
 
 from src.features.engineering import add_engineered_features, apply_unknown_strategy, split_features_and_target
 from src.features.preprocessing import build_preprocessor, infer_feature_types
-from src.modeling.evaluate import optimize_threshold, summarize_predictions
+from src.modeling.evaluate import (
+    build_calibration_table,
+    build_model_stability_report,
+    build_threshold_sensitivity,
+    optimize_threshold,
+    summarize_predictions,
+)
 from src.utils.config import PATHS, RANDOM_STATE
 from src.utils.io import save_frame, save_json
 
@@ -162,6 +168,12 @@ def train_full_benchmark(df: pd.DataFrame, unknown_strategy: str) -> dict[str, o
     test_probabilities = best_model.predict_proba(bundle.X_test)[:, 1]
     validation_summary = summarize_predictions(bundle.y_val, validation_probabilities, threshold=chosen_threshold)
     test_summary = summarize_predictions(bundle.y_test, test_probabilities, threshold=chosen_threshold)
+    threshold_sensitivity = build_threshold_sensitivity(bundle.y_test, test_probabilities)
+    calibration_table = build_calibration_table(bundle.y_test, test_probabilities)
+    model_stability = build_model_stability_report(validation_summary, test_summary)
+    save_frame(threshold_sensitivity, PATHS.output_metrics / "threshold_sensitivity.csv")
+    save_frame(calibration_table, PATHS.output_metrics / "calibration_table.csv")
+    save_json(model_stability, PATHS.output_metrics / "model_stability.json")
 
     full_fit_model = clone(best_model)
     X_train_val = pd.concat([bundle.X_train, bundle.X_val], axis=0)
@@ -205,6 +217,9 @@ def train_full_benchmark(df: pd.DataFrame, unknown_strategy: str) -> dict[str, o
         "test_probabilities": test_probabilities,
         "validation_summary": validation_summary,
         "test_summary": test_summary,
+        "threshold_sensitivity": threshold_sensitivity,
+        "calibration_table": calibration_table,
+        "model_stability": model_stability,
         "scores": scored_population,
     }
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,6 +35,11 @@ class DashboardBundle:
     unknown_strategy: dict
     local_explanations: dict
     segmentation_summary: dict
+    threshold_sensitivity: pd.DataFrame
+    calibration_table: pd.DataFrame
+    slice_metrics: pd.DataFrame
+    model_stability: dict
+    run_manifest: dict
     figures_dir: Path
     root: Path
 
@@ -46,14 +52,20 @@ def load_dashboard_bundle(root: Path) -> DashboardBundle:
     predictions = pd.read_csv(outputs / "predictions" / "test_set_predictions.csv")
     benchmark = pd.read_csv(outputs / "metrics" / "model_benchmark.csv")
     feature_importance = pd.read_csv(outputs / "metrics" / "feature_importance_top20.csv")
+    threshold_sensitivity = pd.read_csv(outputs / "metrics" / "threshold_sensitivity.csv")
+    calibration_table = pd.read_csv(outputs / "metrics" / "calibration_table.csv")
+    slice_metrics = pd.read_csv(outputs / "metrics" / "slice_metrics.csv")
     model_summary = _load_json(outputs / "metrics" / "model_selection_summary.json")
     unknown_strategy = _load_json(outputs / "metrics" / "unknown_strategy_decision.json")
     local_explanations = _load_json(outputs / "metrics" / "local_explanation_cases.json")
     segmentation_summary = _load_json(outputs / "segmentation" / "segmentation_summary.json")
+    model_stability = _load_json(outputs / "metrics" / "model_stability.json")
+    run_manifest = _load_json(outputs / "metrics" / "run_manifest.json")
 
     population = _prepare_population(base, scores, predictions, model_summary["threshold_policy"]["threshold"])
     benchmark_display = _prepare_benchmark(benchmark)
     importance_display = _prepare_feature_importance(feature_importance)
+    slice_metrics_display = _prepare_slice_metrics(slice_metrics)
 
     return DashboardBundle(
         population=population,
@@ -63,6 +75,11 @@ def load_dashboard_bundle(root: Path) -> DashboardBundle:
         unknown_strategy=unknown_strategy,
         local_explanations=local_explanations,
         segmentation_summary=segmentation_summary,
+        threshold_sensitivity=threshold_sensitivity,
+        calibration_table=calibration_table,
+        slice_metrics=slice_metrics_display,
+        model_stability=model_stability,
+        run_manifest=run_manifest,
         figures_dir=figures_dir,
         root=root,
     )
@@ -224,6 +241,135 @@ def prepare_display_table(df: pd.DataFrame) -> pd.DataFrame:
     return display.rename(columns={column: UI_LABELS.get(column, column) for column in display.columns})
 
 
+def build_work_queue(df: pd.DataFrame, threshold: float, limit: int = 200) -> pd.DataFrame:
+    queue = df[df["score_churn"] >= threshold].copy()
+    if queue.empty:
+        queue = df.copy()
+    queue = queue.sort_values(["score_churn", "mois_inactifs_12m", "nb_contacts_12m"], ascending=False).head(limit)
+    display = pd.DataFrame(
+        {
+            "Référence client": queue["identifiant_client"],
+            "Score": queue["score_churn"].round(3),
+            "Bande": queue["bande_risque"],
+            "Persona": queue["segment_client"],
+            "Action": queue.apply(_recommended_customer_action, axis=1),
+            "Mois inactifs": queue["mois_inactifs_12m"].astype(int),
+            "Contacts 12m": queue["nb_contacts_12m"].astype(int),
+        }
+    )
+    return display.reset_index(drop=True)
+
+
+def build_decile_churn_table(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame(columns=["Décile", "Taux de churn", "Score moyen", "Clients"])
+    grouped = (
+        df.groupby("score_decile")
+        .agg(
+            clients=("identifiant_client", "count"),
+            taux_churn=("churn_observe", "mean"),
+            score_moyen=("score_churn", "mean"),
+        )
+        .reset_index()
+        .sort_values("score_decile")
+    )
+    grouped["Décile"] = grouped["score_decile"].map(lambda value: f"D{int(value)}")
+    return grouped.rename(
+        columns={
+            "clients": "Clients",
+            "taux_churn": "Taux de churn",
+            "score_moyen": "Score moyen",
+        }
+    )[["Décile", "Taux de churn", "Score moyen", "Clients"]]
+
+
+def find_customer_by_reference(df: pd.DataFrame, reference: str | None) -> pd.Series | None:
+    if not reference:
+        return None
+    match = df[df["identifiant_client"] == reference]
+    if match.empty:
+        return None
+    return match.iloc[0]
+
+
+def build_customer_explanation(row: pd.Series | None) -> dict[str, str]:
+    if row is None:
+        return {
+            "reference": "Aucun client sélectionné",
+            "risk": "Sélectionnez une ligne dans la file d'actions pour ouvrir une lecture locale.",
+            "signals": "Aucun signal individuel n'est affiché sans sélection explicite.",
+            "action": "Aucune action recommandée.",
+        }
+    risk = (
+        f"{row['identifiant_client']} se situe en bande « {row['bande_risque']} » "
+        f"avec un score de churn de {float(row['score_churn']):.3f}."
+    )
+    signals = (
+        f"Le profil combine {int(row['mois_inactifs_12m'])} mois d'inactivité sur 12 mois, "
+        f"{int(row['nb_transactions_total'])} transactions et {int(row['nb_contacts_12m'])} contacts récents."
+    )
+    action = PERSONA_ACTIONS.get(row["segment_client"], "Qualifier le contexte client avant toute action commerciale.")
+    return {
+        "reference": str(row["identifiant_client"]),
+        "risk": risk,
+        "signals": signals,
+        "action": action,
+    }
+
+
+def build_campaign_editor_seed(df: pd.DataFrame) -> pd.DataFrame:
+    action_table = build_action_table(df)
+    if action_table.empty:
+        return pd.DataFrame(columns=["Persona", "Action", "Cap clients", "Priorité"])
+    seed = action_table[["segment_client", "triage_action", "clients", "priorite"]].copy()
+    seed["Cap clients"] = seed["clients"].map(lambda value: int(min(max(value * 0.25, 25), 500)))
+    seed = seed.rename(columns={"segment_client": "Persona", "triage_action": "Action", "priorite": "Priorité"})
+    return seed[["Persona", "Action", "Cap clients", "Priorité"]]
+
+
+def build_streamlit_capability_table() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {"Capacité Streamlit": "st.navigation / st.Page", "Usage métier": "Navigation applicative par workflows"},
+            {"Capacité Streamlit": "st.popover", "Usage métier": "Filtres avancés sans saturer l'écran"},
+            {"Capacité Streamlit": "st.pills / st.segmented_control", "Usage métier": "Filtres rapides et modes de lecture"},
+            {"Capacité Streamlit": "st.metric", "Usage métier": "KPI exécutifs avec contexte"},
+            {"Capacité Streamlit": "st.plotly_chart(on_select)", "Usage métier": "Sélection de persona depuis un graphique"},
+            {"Capacité Streamlit": "st.dataframe(on_select)", "Usage métier": "Sélection d'un client à investiguer"},
+            {"Capacité Streamlit": "st.dialog", "Usage métier": "Explication locale du risque client"},
+            {"Capacité Streamlit": "st.data_editor", "Usage métier": "Simulation prudente d'un plan de contact"},
+            {"Capacité Streamlit": "st.download_button", "Usage métier": "Export opérationnel des listes visibles"},
+            {"Capacité Streamlit": "st.status / st.toast", "Usage métier": "Fraîcheur des artefacts et feedback utilisateur"},
+            {"Capacité Streamlit": "st.query_params", "Usage métier": "Vue filtrée partageable par URL"},
+            {"Capacité Streamlit": "st.cache_data", "Usage métier": "Chargement rapide des artefacts analytiques"},
+        ]
+    )
+
+
+def to_csv_bytes(df: pd.DataFrame) -> bytes:
+    return df.to_csv(index=False).encode("utf-8")
+
+
+def threshold_row(threshold_sensitivity: pd.DataFrame, threshold: float) -> pd.Series:
+    row_index = (threshold_sensitivity["threshold"] - threshold).abs().idxmin()
+    return threshold_sensitivity.loc[row_index]
+
+
+def build_artifact_health_table(root: Path, manifest: dict) -> pd.DataFrame:
+    rows = []
+    for artifact in manifest.get("artifacts", []):
+        path = root / artifact["path"]
+        rows.append(
+            {
+                "Artefact": artifact["path"],
+                "Présent": bool(path.exists()),
+                "Taille Ko": round(path.stat().st_size / 1024, 1) if path.exists() else 0.0,
+                "Dernière modification": pd.to_datetime(path.stat().st_mtime, unit="s").strftime("%Y-%m-%d %H:%M:%S") if path.exists() else "n.d.",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def get_filtered_test_subset(df: pd.DataFrame) -> tuple[pd.DataFrame, str | None]:
     subset = df[df["est_dans_test"] == 1].copy()
     if subset.empty:
@@ -358,7 +504,7 @@ def build_high_risk_comparison(df: pd.DataFrame) -> pd.DataFrame:
 def build_local_explanation_table(df: pd.DataFrame, cases: dict) -> pd.DataFrame:
     if not cases:
         return pd.DataFrame(
-            columns=["Cas", "Identifiant client", "Segment client", "Bande de risque", "Score de churn", "Issue de prédiction"]
+            columns=["Cas", "Référence client", "Segment client", "Bande de risque", "Score de churn", "Issue de prédiction"]
         )
 
     rows = []
@@ -369,14 +515,14 @@ def build_local_explanation_table(df: pd.DataFrame, cases: dict) -> pd.DataFrame
     }
     for case_key, payload in cases.items():
         client_id = payload.get("CLIENTNUM")
-        match = df[df["identifiant_client"] == client_id]
+        match = df[df["clientnum_source"] == client_id]
         if match.empty:
             continue
         row = match.iloc[0]
         rows.append(
             {
                 "Cas": labels.get(case_key, case_key),
-                "Identifiant client": int(client_id),
+                "Référence client": row["identifiant_client"],
                 "Segment client": row["segment_client"],
                 "Bande de risque": row["bande_risque"],
                 "Score de churn": float(row["score_churn"]),
@@ -384,6 +530,18 @@ def build_local_explanation_table(df: pd.DataFrame, cases: dict) -> pd.DataFrame
             }
         )
     return pd.DataFrame(rows)
+
+
+def _recommended_customer_action(row: pd.Series) -> str:
+    if row["bande_risque"] == "Très élevé":
+        return "Appel proactif"
+    if row["statut_activite"] in {"Très faible activité", "En retrait"}:
+        return "Réactivation"
+    if row["profil_produit"] == "Mono-produit":
+        return "Offre relationnelle"
+    if row["nb_contacts_12m"] >= 4:
+        return "Revue qualitative"
+    return "Veille ciblée"
 
 
 def _prepare_population(base: pd.DataFrame, scores: pd.DataFrame, predictions: pd.DataFrame, threshold: float) -> pd.DataFrame:
@@ -410,7 +568,8 @@ def _prepare_population(base: pd.DataFrame, scores: pd.DataFrame, predictions: p
         .copy()
     )
 
-    merged["identifiant_client"] = merged["CLIENTNUM"]
+    merged["clientnum_source"] = merged["CLIENTNUM"]
+    merged["identifiant_client"] = merged["CLIENTNUM"].map(_anonymize_client_id)
     merged["age_client"] = merged["Customer_Age"]
     merged["nb_personnes_a_charge"] = merged["Dependent_count"]
     merged["anciennete_mois"] = merged["Months_on_book"]
@@ -504,6 +663,40 @@ def _prepare_feature_importance(feature_importance: pd.DataFrame) -> pd.DataFram
     display["famille"] = display["variable"].map(FEATURE_GROUPS).fillna("Autres signaux")
     display = display.rename(columns={"importance": "importance_relative"})
     return display[["variable", "famille", "importance_relative"]]
+
+
+def _prepare_slice_metrics(slice_metrics: pd.DataFrame) -> pd.DataFrame:
+    display = slice_metrics.copy()
+    dimension_labels = {
+        "Gender": "Genre",
+        "Income_Category": "Catégorie de revenu",
+        "Card_Category": "Catégorie de carte",
+        "age_band": "Tranche d'âge",
+        "cluster_label": "Segment client",
+        "risk_band": "Bande de risque",
+    }
+    display["dimension_label"] = display["dimension"].map(dimension_labels).fillna(display["dimension"])
+    display["value_label"] = display.apply(_translate_slice_value, axis=1)
+    return display
+
+
+def _translate_slice_value(row: pd.Series) -> str:
+    value = row["value"]
+    dimension = row["dimension"]
+    if dimension == "Gender":
+        return VALUE_TRANSLATIONS["Gender"].get(value, value)
+    if dimension == "Income_Category":
+        return VALUE_TRANSLATIONS["Income_Category"].get(value, value)
+    if dimension == "Card_Category":
+        return VALUE_TRANSLATIONS["Card_Category"].get(value, value)
+    if dimension == "cluster_label":
+        return PERSONA_LABELS.get(value, value)
+    return value
+
+
+def _anonymize_client_id(client_id: object) -> str:
+    digest = hashlib.sha1(str(client_id).encode("utf-8")).hexdigest()[:8].upper()
+    return f"BC-{digest}"
 
 
 def _load_json(path: Path) -> dict:

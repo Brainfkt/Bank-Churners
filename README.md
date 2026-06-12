@@ -47,7 +47,8 @@ Le workflow suit une logique complète :
 5. calibrage éventuel et choix de seuil ;
 6. interprétation globale et locale ;
 7. segmentation exploratoire des profils ;
-8. mise à disposition d’artefacts pour dashboard et rapport.
+8. audit de fiabilité V2 : sensibilité au seuil, calibration, performance par sous-population et manifeste de run ;
+9. mise à disposition d’artefacts pour dashboard et rapport.
 
 ## Dataset Notes
 - le dataset source est versionné dans `data/raw/BankChurners.csv` ;
@@ -106,6 +107,14 @@ pytest
 - `outputs/segmentation/` : profils de segments / personas ;
 - `reports/figures/` : visuels EDA, performance et explicabilité ;
 - `models/final_model.joblib` : modèle final sérialisé.
+
+## V2 Reliability Notes
+La V2 renforce l'existant sans réécrire l'application :
+- `outputs/metrics/run_manifest.json` documente le commit, le runtime, le seuil, le modèle et les artefacts critiques ;
+- `outputs/metrics/threshold_sensitivity.csv` alimente le simulateur de seuil du dashboard ;
+- `outputs/metrics/calibration_table.csv` relit l'écart entre score moyen prédit et churn observé ;
+- `outputs/metrics/slice_metrics.csv` audite les performances par sous-population ;
+- le dashboard masque désormais `CLIENTNUM` derrière une référence pseudonymisée pour éviter d'exposer directement l'identifiant client.
 
 ## Key Insights
 Le run initial du pipeline retient `XGBoost` pondéré comme meilleur compromis performance / rappel / lisibilité opérationnelle.

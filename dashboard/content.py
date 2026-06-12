@@ -6,8 +6,11 @@ SECTION_ORDER = [
     "Churn Drivers",
     "Model Performance",
     "Risk Scoring",
+    "Decision Lab",
+    "Model Reliability",
     "Customer Segmentation",
     "Business Actions",
+    "Data & Artifact Health",
 ]
 
 
@@ -17,8 +20,11 @@ SECTION_INTROS = {
     "Churn Drivers": "Ici, l'objectif est d'expliquer ce que le modèle utilise le plus pour discriminer les churners potentiels. Ces variables sont des signaux prédictifs, pas des preuves causales.",
     "Model Performance": "Cette vue explique quels modèles ont été comparés, pourquoi le modèle retenu est préféré, et comment lire les principaux indicateurs dans un contexte de rétention.",
     "Risk Scoring": "Le score de churn traduit un niveau de risque individuel. Cette section aide à lire la distribution des scores, à isoler les populations prioritaires et à distinguer prévision et certitude.",
+    "Decision Lab": "Cette section transforme le seuil de décision en conséquences opérationnelles : volumes ciblés, churners captés, fausses alertes et exports de listes de travail.",
+    "Model Reliability": "Cette page relit la stabilité validation/test, la calibration probabiliste et les performances par sous-population afin de limiter la sur-confiance.",
     "Customer Segmentation": "La segmentation est présentée comme une lecture opérationnelle du portefeuille. Dans ce projet, les personas de risque sont privilégiés car les clusters initiaux sont méthodologiquement faibles.",
     "Business Actions": "Cette dernière section transforme les constats analytiques en hypothèses d'action prudentes : qui prioriser, quels signaux suivre et quels types d'intervention tester.",
+    "Data & Artifact Health": "Cette page vérifie la fraîcheur des artefacts, le commit de génération et les principaux contrats de reproductibilité du dashboard.",
 }
 
 
@@ -52,7 +58,7 @@ FILTER_ORDER = list(FILTER_LABELS.keys())
 
 
 UI_LABELS = {
-    "identifiant_client": "Identifiant client",
+    "identifiant_client": "Référence client",
     "age_client": "Âge du client",
     "genre": "Genre",
     "nb_personnes_a_charge": "Nombre de personnes à charge",
